@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake Math Game - Primaria</title>
+  <!-- Incluir KaTeX para fórmulas matemáticas -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.15.3/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.15.3/katex.min.js"></script>
+  <!-- Fuente moderna -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap">
+  <style>
+    /* Variables de color y estilo moderno */
+    :root {
+      --primary-color: #2196F3; /* Azul */
+      --background-color: #F0F8FF; /* Fondo claro */
+      --text-color: #333333;
+      --accent-color: #FF9800; /* Naranja */
+      --food-color: #e53935;  /* Rojo */
+      --snake-color: #4CAF50; /* Verde */
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Roboto', sans-serif;
+      background-color: var(--background-color);
+      color: var(--text-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      text-align: center;
+      width: 100%;
+      max-width: 600px;
+      animation: fadeIn 0.5s;
+    }
+
+    .active {
+      display: flex;
+    }
+
+    h1 {
+      color: var(--primary-color);
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+    }
+
+    button {
+      background-color: var(--primary-color);
+      color: #fff;
+      border: none;
+      padding: 12px 24px;
+      font-size: 1.2rem;
+      border-radius: 25px;
+      cursor: pointer;
+      transition: background-color 0.3s, transform 0.2s;
+      margin: 10px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    button:hover {
+      background-color: #1976D2;
+      transform: scale(1.05);
+    }
+
+    #game-area {
+      position: relative;
+      margin: 20px auto;
+    }
+
+    canvas {
+      background-color: #FFFFFF;
+      border-radius: 10px;
+      touch-action: none;
+      border: 2px solid var(--primary-color);
+      /* Se usará un ancho relativo en pantallas pequeñas */
+      width: 100%;
+      max-width: 400px;
+      height: auto;
+    }
+
+    #score-display, #math-question {
+      font-size: 1.5rem;
+      margin: 10px 0;
+      background: #ffffff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 600px) {
+      h1 {
+        font-size: 2rem;
+      }
+
+      button {
+        padding: 10px 20px;
+        font-size: 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Pantalla de bienvenida -->
+  <div id="welcome-screen" class="screen active">
+    <h1>Snake Math Game</h1>
+    <button id="start-button">Iniciar Juego</button>
+  </div>
+
+  <!-- Pantalla de juego -->
+  <div id="game-screen" class="screen">
+    <div id="math-question"></div>
+    <div id="score-display">Puntuación: 0</div>
+    <div id="game-area">
+      <canvas id="game-canvas"></canvas>
+    </div>
+  </div>
+
+  <!-- Pantalla de fin de partida -->
+  <div id="game-over-screen" class="screen">
+    <h1>¡Buen Intento!</h1>
+    <div id="final-score">Puntuación Final: 0</div>
+    <button id="next-game-button">Jugar Otra Vez</button>
+  </div>
+
+  <!-- Pantalla de fin de sesión -->
+  <div id="session-over-screen" class="screen">
+    <h1>Sesión Terminada</h1>
+    <div id="session-scores"></div>
+    <div id="max-score"></div>
+    <button id="new-session-button">Nueva Sesión</button>
+  </div>
+
+  <script>
+    class SnakeMathGame {
+      constructor() {
+        this.canvas = document.getElementById('game-canvas');
+        this.ctx = this.canvas.getContext('2d');
+        // Se usa cellSize para mantener una grilla; en dispositivos pequeños se adapta el canvas
+        this.cellSize = 20;
+        this.canvas.width = 400;
+        this.canvas.height = 400;
+        
+        this.snake = [];
+        this.direction = 'right';
+        this.nextDirection = 'right';
+        this.food = [];
+        this.score = 0;
+        this.currentQuestion = null;
+        this.gameLoop = null;
+        this.touchStartX = null;
+        this.touchStartY = null;
+        this.scores = [];
+        this.maxGames = 10;
+        
+        this.initializeGame();
+        this.setupEventListeners();
+      }
+
+      // Inicializa el juego
+      initializeGame() {
+        this.snake = [
+          {x: 6, y: 10},
+          {x: 5, y: 10},
+          {x: 4, y: 10}
+        ];
+        this.direction = 'right';
+        this.nextDirection = 'right';
+        this.score = 0;
+        this.generateNewQuestion();
+        this.placeFood();
+        this.updateScore();
+      }
+
+      // Genera una nueva operación simple (suma o resta) con números del 0 al 10
+      generateNewQuestion() {
+        const operations = ['+', '-'];
+        const operation = operations[Math.floor(Math.random() * operations.length)];
+        let num1, num2, answer;
+
+        const getRandomIntInclusive = (min, max) => {
+          return Math.floor(Math.random() * (max - min + 1)) + min;
+        };
+
+        if(operation === '+') {
+          num1 = getRandomIntInclusive(0, 10);
+          num2 = getRandomIntInclusive(0, 10);
+          answer = num1 + num2;
+        } else if(operation === '-') {
+          num1 = getRandomIntInclusive(0, 10);
+          num2 = getRandomIntInclusive(0, num1); // Garantiza resultado no negativo
+          answer = num1 - num2;
+        }
+
+        this.currentQuestion = {
+          text: `${num1} ${operation} ${num2}`,
+          answer: answer,
+          wrongAnswers: this.generateWrongAnswers(answer)
+        };
+
+        const mathQuestion = document.getElementById('math-question');
+        katex.render(this.currentQuestion.text + " = ?", mathQuestion);
+      }
+
+      // Genera 3 respuestas incorrectas simples, ajustadas para números pequeños
+      generateWrongAnswers(correctAnswer) {
+        const wrongAnswers = new Set();
+        while(wrongAnswers.size < 3) {
+          let offset = getRandomInt(1, 3);
+          // Alterna sumar o restar
+          let wrong = Math.random() < 0.5 ? correctAnswer + offset : correctAnswer - offset;
+          if(wrong === correctAnswer || wrong < 0) continue;
+          wrongAnswers.add(wrong);
+        }
+        return Array.from(wrongAnswers);
+      }
+
+      // Coloca las “galletas” con las respuestas en posiciones aleatorias, evitando la cercanía a la cabeza
+      placeFood() {
+        const answers = [...this.currentQuestion.wrongAnswers, this.currentQuestion.answer];
+        this.food = [];
+        const safeDistance = 3;
+        for(let answer of answers) {
+          let position;
+          let attempts = 0;
+          do {
+            position = {
+              x: Math.floor(Math.random() * (this.canvas.width / this.cellSize)),
+              y: Math.floor(Math.random() * (this.canvas.height / this.cellSize)),
+              value: answer
+            };
+            attempts++;
+          } while(
+            (this.isPositionOccupied(position) || this.isNearSnakeHead(position, safeDistance)) &&
+            attempts < 100
+          );
+          if(attempts >= 100) {
+            position = {
+              x: Math.floor(Math.random() * (this.canvas.width / this.cellSize)),
+              y: Math.floor(Math.random() * (this.canvas.height / this.cellSize)),
+              value: answer
+            };
+          }
+          this.food.push(position);
+        }
+      }
+
+      isPositionOccupied(position) {
+        return this.snake.some(segment => segment.x === position.x && segment.y === position.y) ||
+               this.food.some(food => food.x === position.x && food.y === position.y);
+      }
+
+      isNearSnakeHead(position, distance) {
+        const head = this.snake[0];
+        const dx = Math.abs(head.x - position.x);
+        const dy = Math.abs(head.y - position.y);
+        return dx <= distance && dy <= distance;
+      }
+
+      // Mueve la serpiente según la dirección indicada y gestiona la interacción con la “galleta”
+      moveSnake() {
+        this.direction = this.nextDirection;
+        const head = {...this.snake[0]};
+        switch(this.direction) {
+          case 'up': head.y--; break;
+          case 'down': head.y++; break;
+          case 'left': head.x--; break;
+          case 'right': head.x++; break;
+        }
+        if(this.checkCollision(head)) {
+          this.endGame();
+          return;
+        }
+        this.snake.unshift(head);
+        const foodEatenIndex = this.food.findIndex(f => f.x === head.x && f.y === head.y);
+        if(foodEatenIndex !== -1) {
+          const eatenValue = this.food[foodEatenIndex].value;
+          if(eatenValue === this.currentQuestion.answer) {
+            this.score += 1;
+            this.generateNewQuestion();
+            this.placeFood();
+          } else {
+            this.score = Math.max(0, this.score - 1);
+            if(this.snake.length > 3) {
+              this.snake.pop();
+            }
+            this.food.splice(foodEatenIndex, 1);
+          }
+          this.updateScore();
+        } else {
+          this.snake.pop();
+        }
+      }
+
+      checkCollision(head) {
+        return head.x < 0 || 
+               head.x >= this.canvas.width / this.cellSize ||
+               head.y < 0 || 
+               head.y >= this.canvas.height / this.cellSize ||
+               this.snake.slice(1).some(segment => segment.x === head.x && segment.y === head.y) ||
+               this.snake.length < 3;
+      }
+
+      // Dibuja la serpiente y las “galletas” en el canvas
+      draw() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.snake.forEach((segment, index) => {
+          this.ctx.fillStyle = index === 0 ? 
+            getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim() : 
+            getComputedStyle(document.documentElement).getPropertyValue('--snake-color').trim();
+          this.ctx.fillRect(
+            segment.x * this.cellSize,
+            segment.y * this.cellSize,
+            this.cellSize - 1,
+            this.cellSize - 1
+          );
+        });
+        this.food.forEach(food => {
+          this.ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--food-color').trim();
+          this.ctx.beginPath();
+          this.ctx.arc(
+            food.x * this.cellSize + this.cellSize / 2,
+            food.y * this.cellSize + this.cellSize / 2,
+            this.cellSize - 4,
+            0,
+            2 * Math.PI
+          );
+          this.ctx.fill();
+          this.ctx.fillStyle = '#ffffff';
+          this.ctx.font = '14px Arial';
+          this.ctx.textAlign = 'center';
+          this.ctx.textBaseline = 'middle';
+          this.ctx.fillText(
+            food.value.toString(),
+            food.x * this.cellSize + this.cellSize / 2,
+            food.y * this.cellSize + this.cellSize / 2
+          );
+        });
+      }
+
+      updateScore() {
+        document.getElementById('score-display').textContent = `Puntuación: ${this.score}`;
+      }
+
+      // Inicia el juego, ajustando además la velocidad (200ms) para facilitar el juego
+      startGame() {
+        this.initializeGame();
+        this.gameLoop = setInterval(() => {
+          this.moveSnake();
+          this.draw();
+        }, 200);
+        document.getElementById('welcome-screen').classList.remove('active');
+        document.getElementById('game-over-screen').classList.remove('active');
+        document.getElementById('session-over-screen').classList.remove('active');
+        document.getElementById('game-screen').classList.add('active');
+      }
+
+      endGame() {
+        clearInterval(this.gameLoop);
+        this.scores.push(this.score);
+        if (this.scores.length < this.maxGames) {
+          document.getElementById('final-score').textContent = `Puntuación Final: ${this.score}`;
+          document.getElementById('game-screen').classList.remove('active');
+          document.getElementById('game-over-screen').classList.add('active');
+        } else {
+          this.showSessionResults();
+        }
+      }
+
+      showSessionResults() {
+        const sessionScores = document.getElementById('session-scores');
+        sessionScores.innerHTML = '<h2>Puntajes de la Sesión:</h2>';
+        this.scores.forEach((score, index) => {
+          sessionScores.innerHTML += `<p>Partida ${index + 1}: ${score}</p>`;
+        });
+        const maxScore = Math.max(...this.scores);
+        document.getElementById('max-score').textContent = `Puntaje Máximo: ${maxScore}`;
+        document.getElementById('game-screen').classList.remove('active');
+        document.getElementById('game-over-screen').classList.remove('active');
+        document.getElementById('session-over-screen').classList.add('active');
+      }
+
+      setupEventListeners() {
+        document.getElementById('start-button').addEventListener('click', () => this.startGame());
+        document.getElementById('next-game-button').addEventListener('click', () => {
+          document.getElementById('game-over-screen').classList.remove('active');
+          this.startGame();
+        });
+        document.getElementById('new-session-button').addEventListener('click', () => {
+          this.scores = [];
+          document.getElementById('session-over-screen').classList.remove('active');
+          document.getElementById('welcome-screen').classList.add('active');
+        });
+        // Controles de teclado
+        document.addEventListener('keydown', (event) => {
+          if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+            event.preventDefault();
+          }
+          switch(event.key) {
+            case 'ArrowUp':
+              if(this.direction !== 'down') this.nextDirection = 'up';
+              break;
+            case 'ArrowDown':
+              if(this.direction !== 'up') this.nextDirection = 'down';
+              break;
+            case 'ArrowLeft':
+              if(this.direction !== 'right') this.nextDirection = 'left';
+              break;
+            case 'ArrowRight':
+              if(this.direction !== 'left') this.nextDirection = 'right';
+              break;
+          }
+        });
+        // Controles táctiles para dispositivos móviles y tabletas
+        this.canvas.addEventListener('touchstart', (e) => {
+          this.touchStartX = e.touches[0].clientX;
+          this.touchStartY = e.touches[0].clientY;
+          e.preventDefault();
+        }, { passive: false });
+        this.canvas.addEventListener('touchmove', (e) => {
+          if (!this.touchStartX || !this.touchStartY) return;
+          const touchEndX = e.touches[0].clientX;
+          const touchEndY = e.touches[0].clientY;
+          const deltaX = touchEndX - this.touchStartX;
+          const deltaY = touchEndY - this.touchStartY;
+          if (Math.abs(deltaX) > 30 || Math.abs(deltaY) > 30) {
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+              if (deltaX > 0 && this.direction !== 'left') {
+                this.nextDirection = 'right';
+              } else if (deltaX < 0 && this.direction !== 'right') {
+                this.nextDirection = 'left';
+              }
+            } else {
+              if (deltaY > 0 && this.direction !== 'up') {
+                this.nextDirection = 'down';
+              } else if (deltaY < 0 && this.direction !== 'down') {
+                this.nextDirection = 'up';
+              }
+            }
+            this.touchStartX = touchEndX;
+            this.touchStartY = touchEndY;
+          }
+          e.preventDefault();
+        }, { passive: false });
+        this.canvas.addEventListener('touchend', () => {
+          this.touchStartX = null;
+          this.touchStartY = null;
+        });
+      }
+    }
+
+    // Inicializa el juego al cargar el DOM
+    document.addEventListener('DOMContentLoaded', () => {
+      new SnakeMathGame();
+    });
+
+    // Función auxiliar global para obtener números enteros
+    function getRandomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+  </script>
+</body>
+</html>
